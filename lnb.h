@@ -18,17 +18,26 @@
  *
  */
 
-#ifndef __FRONTEND_H__
-#define __FRONTEND_H__
 
-#include <linux/dvb/frontend.h>
+#ifndef __LNB_H__
+#define __LNB_H__
 
-int frontend_open(char *frontend, struct dvb_frontend_info *fe_info);
-void frontend_print_info(struct dvb_frontend_info *fe_info);
-int frontend_tune(int frontend_fd, unsigned int ifreq, unsigned int symbol_rate);
-int frontend_get_status(int frontend_fd, unsigned int timeout, fe_status_t *status);
-int frontend_set_voltage(int frontend_fd, fe_sec_voltage_t v);
-int frontend_set_tone(int frontend_fd, fe_sec_tone_mode_t t);
-int frontend_close(int frontend_fd);
+enum lnb_type {
+	lnb_type_univeral,
+};
+
+struct lnb_parameters {
+	char *name;
+	unsigned int low_val;
+	unsigned int high_val;
+	unsigned int switch_val;
+	unsigned int min_freq;
+	unsigned int max_freq;
+};
+
+int lnb_get_parameters(enum lnb_type type, unsigned int frequency, unsigned int *ifreq, unsigned int *hiband);
+int lnb_get_limits(enum lnb_type, unsigned int *min_freq, unsigned int *max_freq);
+
+
 
 #endif

@@ -27,6 +27,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+#include <poll.h>
 
 int frontend_open(char *frontend, struct dvb_frontend_info *fe_info) {
 	// Open the DVB device
@@ -50,11 +51,6 @@ int frontend_open(char *frontend, struct dvb_frontend_info *fe_info) {
 	if (fe_info->type != FE_QPSK) {
 		printf("Error : the frontend %s is not a DVB-S frontend !\n", frontend);
 		goto err;
-	}
-
-	if (!fe_info->frequency_stepsize) {
-		printf("Warning, frontend returned frequency step size of 0, defaulting to 1Mhz\n");
-		fe_info->frequency_stepsize = 1000;
 	}
 
 	return frontend_fd;
@@ -84,7 +80,7 @@ void frontend_print_info(struct dvb_frontend_info *fe_info) {
 
 }
 
-int frontend_tune(int frontend_fd, unsigned int ifreq, unsigned int symbol_rate, unsigned int timeout) {
+int frontend_tune(int frontend_fd, unsigned int ifreq, unsigned int symbol_rate) {
 
 	struct dvb_frontend_parameters params;
 	struct dvb_frontend_event ev;
@@ -96,6 +92,71 @@ int frontend_tune(int frontend_fd, unsigned int ifreq, unsigned int symbol_rate,
 
 	if (ioctl(frontend_fd, FE_SET_FRONTEND, &params)) {
 		perror("Error while setting frontend");
+		return 1;
+	}
+	
+	return 0;
+}
+
+
+int frontend_get_status(int frontend_fd, unsigned int timeout, fe_status_t *status) {
+
+	struct pollfd pfd[1];
+	pfd[0].fd = frontend_fd;
+	pfd[0].events = POLLIN;
+
+	struct timeval now;
+	gettimeofday(&now, NULL);
+	
+	time_t expiry = now.tv_sec + timeout;
+
+	while (now.tv_sec < expiry) {
+
+		int res = poll(pfd, 1, timeout);
+
+		if (res < 0) {
+			perror("Error while polling frontend");
+			return -1;
+		}
+
+		if (!res) { // Timeout
+			gettimeofday(&now);
+			continue;
+		}
+		
+		if (pfd[0].revents & POLLIN) {
+			memset(status, 0, sizeof(fe_status_t));
+			if (ioctl(frontend_fd, FE_READ_STATUS, status)) {
+				perror("Error while getting frontend status");
+				return -1;
+			}
+
+			if (*status & FE_HAS_LOCK) {
+				// Got lock
+				return 0;
+			}
+
+		}
+		gettimeofday(&now, NULL);
+	}
+
+	return 0;
+}
+
+int frontend_set_voltage(int frontend_fd, fe_sec_voltage_t v) {
+
+	if (ioctl(frontend_fd, FE_SET_VOLTAGE, v)) {
+		perror("Error while setting voltage");
+		return -1;
+	}
+
+	return 0;
+}
+
+int frontend_set_tone(int frontend_fd, fe_sec_tone_mode_t t) {
+
+	if (ioctl(frontend_fd, FE_SET_TONE, t)) {
+		perror("Error while setting tone");
 		return -1;
 	}
 

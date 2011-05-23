@@ -18,17 +18,47 @@
  *
  */
 
-#ifndef __FRONTEND_H__
-#define __FRONTEND_H__
 
-#include <linux/dvb/frontend.h>
+#include "lnb.h"
 
-int frontend_open(char *frontend, struct dvb_frontend_info *fe_info);
-void frontend_print_info(struct dvb_frontend_info *fe_info);
-int frontend_tune(int frontend_fd, unsigned int ifreq, unsigned int symbol_rate);
-int frontend_get_status(int frontend_fd, unsigned int timeout, fe_status_t *status);
-int frontend_set_voltage(int frontend_fd, fe_sec_voltage_t v);
-int frontend_set_tone(int frontend_fd, fe_sec_tone_mode_t t);
-int frontend_close(int frontend_fd);
 
-#endif
+static struct lnb_parameters lnbs[] = {
+	{ "univeral", 9750000, 10660000, 11700000, 10700000, 12750000 },
+};
+
+int lnb_get_parameters(enum lnb_type type, unsigned int frequency, unsigned int *ifreq, unsigned int *hiband) {
+
+	if (!ifreq || !hiband)
+		return -1;
+
+	*hiband = 0;
+
+	struct lnb_parameters *lnb = &lnbs[type];
+
+	if (frequency > lnb->switch_val)
+		*hiband = 1;
+
+	if (*hiband) {
+		*ifreq = frequency - lnb->high_val;
+	} else {
+		if (frequency < lnb->low_val)
+			*ifreq = lnb->low_val - frequency;
+		else
+			*ifreq = frequency - lnb->low_val;
+	}
+
+	return 0;
+}
+
+int lnb_get_limits(enum lnb_type type, unsigned int *min_freq, unsigned int *max_freq) {
+
+	if (!min_freq || !max_freq)
+		return -1;
+	
+	*min_freq = lnbs[type].min_freq;
+	*max_freq = lnbs[type].max_freq;
+
+	return 0;
+	
+}
+
