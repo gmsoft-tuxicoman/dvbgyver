@@ -23,7 +23,7 @@
 
 
 static struct lnb_parameters lnbs[] = {
-	{ "univeral", 9750000, 10660000, 11700000, 10700000, 12750000 },
+	{ "universal", 9750000, 10600000, 11700000, 10700000, 12750000 },
 };
 
 int lnb_get_parameters(enum lnb_type type, unsigned int frequency, unsigned int *ifreq, unsigned int *hiband) {
