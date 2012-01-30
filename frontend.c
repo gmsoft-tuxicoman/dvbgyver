@@ -112,7 +112,7 @@ int frontend_get_status(int frontend_fd, unsigned int timeout, fe_status_t *stat
 
 	while (now.tv_sec < expiry) {
 
-		int res = poll(pfd, 1, timeout);
+		int res = poll(pfd, 1, 1000);
 
 		if (res < 0) {
 			perror("Error while polling frontend");
@@ -130,6 +130,19 @@ int frontend_get_status(int frontend_fd, unsigned int timeout, fe_status_t *stat
 				perror("Error while getting frontend status");
 				return -1;
 			}
+
+			fh_debug("Status : ");
+			if (*status & FE_HAS_SIGNAL)
+				fh_debug("SIGNAL ");
+			if (*status & FE_HAS_CARRIER)
+				fh_debug("CARRIER ");
+			if (*status & FE_HAS_VITERBI)
+				fh_debug("VITERBI ");
+			if (*status & FE_HAS_SYNC)
+				fh_debug("SYNC ");
+			if (*status & FE_HAS_LOCK)
+				fh_debug("LOCK");
+			fh_debug("\n");
 
 			if (*status & FE_HAS_LOCK) {
 				// Got lock

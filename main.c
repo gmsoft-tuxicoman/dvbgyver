@@ -179,7 +179,7 @@ int main(int argc, char *argv[]) {
 	if (fe_info.frequency_stepsize > freq_step)
 		freq_step = fe_info.frequency_stepsize;
 
-	if (!freq_step) {
+	if (freq_step < 1000) {
 		printf("Frontend returned frequency step size < 1Mhz, defaulting to 1Mhz\n");
 		freq_step = 1000;
 	}

@@ -25,7 +25,6 @@
 #include "lnb.h"
 #include "main.h"
 
-
 int scan(int frontend_fd, unsigned int timeout, unsigned int start_freq, unsigned int end_freq, unsigned int step) {
 
 	unsigned int cur_freq = start_freq;
@@ -33,7 +32,11 @@ int scan(int frontend_fd, unsigned int timeout, unsigned int start_freq, unsigne
 
 	printf("Scanning from %u Mhz to %u Mhz with %u Mhz steps ...\n", start_freq / 1000, end_freq / 1000, step / 1000);
 
-	for (cur_freq = start_freq; cur_freq <= end_freq; cur_freq += step) {
+	int polarity = 0;
+	int polarity_try = 0;
+
+	while (cur_freq <= end_freq) {
+
 
 		fh_progress(cur_freq - start_freq, end_freq - start_freq);
 
@@ -43,42 +46,38 @@ int scan(int frontend_fd, unsigned int timeout, unsigned int start_freq, unsigne
 			return -1;
 		}
 
-		int i;
-		// Try vertical and horizontal polarization
-		for (i = 0; i < 2; i++) {
-			fh_debug("Tuning to %u Mhz, %u MSym/s, %s Polarity ...\n", cur_freq / 1000, sample_rate / 1000, (i ? "V" : "H"));
-			// 13V is vertical polarity and 18V is horizontal
-			if (frontend_set_voltage(frontend_fd, (i ? SEC_VOLTAGE_13 : SEC_VOLTAGE_18)))
-				return -1;
 
-			if (frontend_set_tone(frontend_fd, (hiband ? SEC_TONE_ON : SEC_TONE_OFF)))
-				return -1;
+		fh_debug("Tuning to %u Mhz, %u MSym/s, %s Polarity ...\n", cur_freq / 1000, sample_rate / 1000, (polarity ? "V" : "H"));
+		// 13V is vertical polarity and 18V is horizontal
+		if (frontend_set_voltage(frontend_fd, (polarity ? SEC_VOLTAGE_13 : SEC_VOLTAGE_18)))
+			return -1;
 
-			if (frontend_tune(frontend_fd, ifreq, sample_rate))
-				return -1;
+		if (frontend_set_tone(frontend_fd, (hiband ? SEC_TONE_ON : SEC_TONE_OFF)))
+			return -1;
 
-			fe_status_t status;
-			if (frontend_get_status(frontend_fd, timeout,  &status))
-				return -1;
+		if (frontend_tune(frontend_fd, ifreq, sample_rate))
+			return -1;
 
-			fh_debug("Status : ");
-			if (status & FE_HAS_SIGNAL)
-				fh_debug("SIGNAL ");
-			if (status & FE_HAS_CARRIER)
-				fh_debug("CARRIER ");
-			if (status & FE_HAS_VITERBI)
-				fh_debug(" VITERBI ");
-			if (status & FE_HAS_SYNC)
-				fh_debug(" SYNC ");
-			if (status & FE_HAS_LOCK)
-				fh_debug(" LOCK");
+		fe_status_t status;
+		if (frontend_get_status(frontend_fd, timeout,  &status))
+			return -1;
 
-			fh_debug("\n");
-
+		if (status & FE_HAS_LOCK) {
+			// TODO write down we locked
+			// Try next frequency with same polarity
+			cur_freq += step;
+		} else if (polarity_try >= 1) {
+			// Go to next frequency and reset polarity
+			polarity = 0;
+			polarity_try = 0;
+			cur_freq += step;
+		} else {
+			// Switch polarity
+			polarity = !polarity;
+			polarity_try++;
 		}
 
 	}
-
 	
 	return 0;
 }
