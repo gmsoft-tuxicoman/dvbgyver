@@ -19,6 +19,7 @@
  */
 
 #include "frontend.h"
+#include "utils.h"
 
 #include <stdio.h>
 #include <sys/ioctl.h>
@@ -131,18 +132,18 @@ int frontend_get_status(int frontend_fd, unsigned int timeout, fe_status_t *stat
 				return -1;
 			}
 
-			fh_debug("Status : ");
+			dvb_debug("Status : ");
 			if (*status & FE_HAS_SIGNAL)
-				fh_debug("SIGNAL ");
+				dvb_debug("SIGNAL ");
 			if (*status & FE_HAS_CARRIER)
-				fh_debug("CARRIER ");
+				dvb_debug("CARRIER ");
 			if (*status & FE_HAS_VITERBI)
-				fh_debug("VITERBI ");
+				dvb_debug("VITERBI ");
 			if (*status & FE_HAS_SYNC)
-				fh_debug("SYNC ");
+				dvb_debug("SYNC ");
 			if (*status & FE_HAS_LOCK)
-				fh_debug("LOCK");
-			fh_debug("\n");
+				dvb_debug("LOCK");
+			dvb_debug("\n");
 
 			if (*status & FE_HAS_LOCK) {
 				// Got lock

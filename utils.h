@@ -1,6 +1,6 @@
 /*
- *  feedhunter : Automated satellite feed hunter
- *  Copyright (C) 2011 Guy Martin <gmsoft@tuxicoman.be>
+ *  dvbgyver: A suite of tools for DVB 
+ *  Copyright (C) 2012 Guy Martin <gmsoft@tuxicoman.be>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,10 +18,12 @@
  *
  */
 
-#ifndef __MAIN_H__
-#define __MAIN_H__
 
-int fh_debug(const char *format, ...);
-int fh_progress(unsigned int cur, unsigned int max);
+#ifndef __UTILS_H__
+#define __UTILS_H__
+
+void dvb_set_verbose(int verbose);
+int dvb_get_verbose();
+int dvb_debug(const char *format, ...);
 
 #endif

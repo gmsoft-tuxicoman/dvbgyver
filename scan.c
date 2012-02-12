@@ -23,7 +23,7 @@
 #include "scan.h"
 #include "frontend.h"
 #include "lnb.h"
-#include "main.h"
+#include "utils.h"
 
 int scan(int frontend_fd, unsigned int timeout, unsigned int start_freq, unsigned int end_freq, unsigned int step) {
 
@@ -38,7 +38,7 @@ int scan(int frontend_fd, unsigned int timeout, unsigned int start_freq, unsigne
 	while (cur_freq <= end_freq) {
 
 
-		fh_progress(cur_freq - start_freq, end_freq - start_freq);
+		scan_progress(cur_freq - start_freq, end_freq - start_freq);
 
 		unsigned int ifreq = 0, hiband = 0;
 		if (lnb_get_parameters(lnb_type_univeral, cur_freq, &ifreq, &hiband)) {
@@ -47,7 +47,7 @@ int scan(int frontend_fd, unsigned int timeout, unsigned int start_freq, unsigne
 		}
 
 
-		fh_debug("Tuning to %u Mhz, %u MSym/s, %s Polarity ...\n", cur_freq / 1000, sample_rate / 1000, (polarity ? "V" : "H"));
+		dvb_debug("Tuning to %u Mhz, %u MSym/s, %s Polarity ...\n", cur_freq / 1000, sample_rate / 1000, (polarity ? "V" : "H"));
 		// 13V is vertical polarity and 18V is horizontal
 		if (frontend_set_voltage(frontend_fd, (polarity ? SEC_VOLTAGE_13 : SEC_VOLTAGE_18)))
 			return -1;
@@ -83,3 +83,24 @@ int scan(int frontend_fd, unsigned int timeout, unsigned int start_freq, unsigne
 }
 
 
+int scan_progress(unsigned int cur, unsigned int max) {
+
+	if (dvb_get_verbose())
+		return 0;
+
+	double progress = 100.0 / (double) max * (double) cur;
+
+	printf("\r[");
+
+	int bars = progress / 2;
+	int spaces = 50 - bars;
+	int i;
+
+	for (i = 0; i < bars; i++)
+		printf("-");
+	for (i = 0; i < spaces; i++)
+		printf(" ");
+	printf("] %0.2f%%", progress);
+
+	fflush(NULL);
+}

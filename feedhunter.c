@@ -21,9 +21,7 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <limits.h>
-#include <stdarg.h>
 
-#include "main.h"
 #include "frontend.h"
 #include "lnb.h"
 #include "config.h"
@@ -115,6 +113,7 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'v':
 				verbose = 1;
+				dvb_set_verbose(verbose);
 				break;
 			case 'm':
 				if (sscanf(optarg, "%u", &freq_start) != 1) {
@@ -200,40 +199,3 @@ err:
 }
 
 
-
-int fh_debug(const char *format, ...) {
-	if (!verbose)
-		return 0;
-
-	int ret = 0;
-
-	va_list arg_list;
-	va_start(arg_list, format);
-	ret = vprintf(format, arg_list);
-	va_end(arg_list);
-
-	return ret;
-}
-
-
-int fh_progress(unsigned int cur, unsigned int max) {
-
-	if (verbose)
-		return 0;
-
-	double progress = 100.0 / (double) max * (double) cur;
-
-	printf("\r[");
-
-	int bars = progress / 2;
-	int spaces = 50 - bars;
-	int i;
-
-	for (i = 0; i < bars; i++)
-		printf("-");
-	for (i = 0; i < spaces; i++)
-		printf(" ");
-	printf("] %0.2f%%", progress);
-
-	fflush(NULL);
-}
