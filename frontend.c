@@ -49,11 +49,6 @@ int frontend_open(char *frontend, struct dvb_frontend_info *fe_info) {
 		goto err;
 	}
 
-	if (fe_info->type != FE_QPSK) {
-		printf("Error : the frontend %s is not a DVB-S frontend !\n", frontend);
-		goto err;
-	}
-
 	return frontend_fd;
 
 err:
@@ -63,28 +58,47 @@ err:
 
 void frontend_print_info(struct dvb_frontend_info *fe_info) {
 
+	char *fe_type = "Unknown";
+	switch (fe_info->type) {
+		case FE_QPSK:
+			fe_type = "DVB-S";
+			break;
+		case FE_QAM:
+			fe_type = "DVB-C";
+			break;
+		case FE_OFDM:
+			fe_type = "DVB-T";
+			break;
+		case FE_ATSC:
+			fe_type = "ATSC";
+			break;
+	}
+	
+
 	printf("Frontend info :\n"
+		"  Frontend type       : %s\n"
 		"  Mininum frequency   : %u Mhz\n"
 		"  Maximum frequency   : %u Mhz\n"
 		"  Frequency step      : %u Mhz\n"
 		"  Mininum symbol rate : %u MSym/S\n"
 		"  Maximum symbol rate : %u MSym/S\n"
-		"  Can do DVB-S2       : %s\n"
-
+		, fe_type
 		, fe_info->frequency_min / 1000
 		, fe_info->frequency_max / 1000
 		, fe_info->frequency_stepsize / 1000
 		, fe_info->symbol_rate_min / 1000000
-		, fe_info->symbol_rate_max / 1000000
-		, ((fe_info->caps & FE_CAN_2G_MODULATION) ? "yes" : "no")
-		);
+		, fe_info->symbol_rate_max / 1000000);
+
+	if (fe_info->type == FE_QPSK) {
+		printf ("  Can do DVB-S2       : %s\n"
+			, ((fe_info->caps & FE_CAN_2G_MODULATION) ? "yes" : "no"));
+	}
 
 }
 
-int frontend_tune(int frontend_fd, unsigned int ifreq, unsigned int symbol_rate) {
+int frontend_tune_dvb_s(int frontend_fd, unsigned int ifreq, unsigned int symbol_rate) {
 
-	struct dvb_frontend_parameters params;
-	struct dvb_frontend_event ev;
+	struct dvb_frontend_parameters params = {0};
 
 	params.frequency = ifreq;
 	params.inversion = INVERSION_AUTO;
@@ -98,6 +112,24 @@ int frontend_tune(int frontend_fd, unsigned int ifreq, unsigned int symbol_rate)
 	
 	return 0;
 }
+
+int frontend_tune_dvb_c(int frontend_fd, unsigned int freq, unsigned int symbol_rate, fe_modulation_t modulation) {
+	
+	struct dvb_frontend_parameters params = {0};
+	params.frequency = freq;
+	params.inversion = INVERSION_AUTO;
+	params.u.qam.symbol_rate = symbol_rate;
+	params.u.qam.fec_inner = FEC_AUTO;
+	params.u.qam.modulation = modulation;
+
+	if (ioctl(frontend_fd, FE_SET_FRONTEND, &params)) {
+		perror("Error while setting frontend");
+		return 1;
+	}
+
+	return 0;
+}
+
 
 
 int frontend_get_status(int frontend_fd, unsigned int timeout, fe_status_t *status) {

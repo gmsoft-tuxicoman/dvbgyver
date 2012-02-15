@@ -55,7 +55,7 @@ int scan(int frontend_fd, unsigned int timeout, unsigned int start_freq, unsigne
 		if (frontend_set_tone(frontend_fd, (hiband ? SEC_TONE_ON : SEC_TONE_OFF)))
 			return -1;
 
-		if (frontend_tune(frontend_fd, ifreq, sample_rate))
+		if (frontend_tune_dvb_s(frontend_fd, ifreq, sample_rate))
 			return -1;
 
 		fe_status_t status;

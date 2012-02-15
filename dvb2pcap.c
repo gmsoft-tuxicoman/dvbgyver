@@ -41,14 +41,28 @@
 #define PID_FULL_TS 0x2000
 #define MPEG_TS_LEN 188
 
+#ifndef DLT_MPEG_2_TS
 #define DLT_MPEG_2_TS DLT_USER0
+#endif
 
 static int run = 0;
 
 void print_usage(char *app) {
 	
 	printf("Usage : %s <options>\n"
-	
+		"\n"
+		"Options are :\n"
+		" -h, --help                 Display this help and exit\n"
+		" -a, --adapter=X            Adapter to use\n"
+		" -f, --frontend=X           Frontend to use\n"
+		" -d, --demux=X              Demux to use\n"
+		" -t, --timeout=X            Tuning timeout in seconds, default 5\n"
+		" -f, --frequency=X          Frequency to tune to in Hz\n"
+		" -s, --symbol-rate=X        Symbol rate in Sym/s\n"
+		" -p, --polarity=[h,v]       Polarity (DVB-S only, default: h)\n"
+		" -o, --output=X             Output file (default: dvb.cap)\n"
+		" -m, --modulation=[64,256]  QAM modulation to use (DVB-C only, default: 256)\n"
+		" -P, --pid=X                Capture a single PID (default: all)\n"
 		,app);
 
 }
@@ -67,9 +81,12 @@ int main(int argc, char *argv[]) {
 	unsigned int tuning_timeout = 3;
 	unsigned int frequency = 0;
 	unsigned int symbol_rate = 27500000;
+	fe_modulation_t modulation = QAM_256;
+
+	unsigned long int pkt_count = 0;
 
 	char polarity = 'h';
-	char *output = NULL;
+	char *output = "dvb.cap";
 
 	unsigned int verbose = 0;
 
@@ -85,11 +102,12 @@ int main(int argc, char *argv[]) {
 			{ "frequency", 1, 0, 'f' },
 			{ "symbol-rate", 1, 0, 's' },
 			{ "polarity", 1, 0, 'p' },
+			{ "modulation", 1, 0, 'm' },
 			{ "output", 1, 0, 'o' },
-			{ "PID", 1, 0, 'P' },
+			{ "pid", 1, 0, 'P' },
 		};
 
-		char *args = "hA:F:D:t:f:s:p:o:P:";
+		char *args = "hA:F:D:t:f:s:p:m:o:P:";
 
 		int c = getopt_long(argc, argv, args, long_options, NULL);
 
@@ -162,6 +180,17 @@ int main(int argc, char *argv[]) {
 					return 1;
 				}
 				break;
+			case 'm':
+				if (!strcmp("64", optarg)) {
+					modulation = QAM_64;
+				} else if (!strcmp("256", optarg)) {
+					modulation = QAM_256;
+				} else {
+					printf("Invalid modulation \"%s\"\n", optarg);
+					print_usage(argv[0]);
+					return 1;
+				}
+				break;
 
 			case 'o':
 				output = optarg;
@@ -180,13 +209,6 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (!output) {
-		printf("You must specify an output with -o\n");
-		print_usage(argv[0]);
-		return 1;
-	}
-
-
 	// Open the frontend
 
 	char frontend_str[NAME_MAX];
@@ -198,21 +220,41 @@ int main(int argc, char *argv[]) {
 	if (frontend_fd == -1)
 		return 1;
 
-	printf("Tuning to %u Mhz, %u MSym/s, %c Polarity ...\n", frequency / 1000, symbol_rate / 1000, polarity);
-	unsigned int ifreq = 0, hiband = 0;
-	if (lnb_get_parameters(lnb_type_univeral, frequency, &ifreq, &hiband)) {	
-		printf("Error while getting LNB parameters");
-		return 1;
+	frontend_print_info(&fe_info);
+
+	switch (fe_info.type) {
+		case FE_QPSK: {
+			printf("Tuning to %u Mhz, %u MSym/s, %c Polarity ...\n", frequency / 1000, symbol_rate / 1000, polarity);
+			unsigned int ifreq = 0, hiband = 0;
+			if (lnb_get_parameters(lnb_type_univeral, frequency, &ifreq, &hiband)) {	
+				printf("Error while getting LNB parameters");
+				return 1;
+			}
+
+			if (frontend_set_voltage(frontend_fd, (polarity == 'h' ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13)))
+				return -1;
+
+			if (frontend_set_tone(frontend_fd, (hiband ? SEC_TONE_ON : SEC_TONE_OFF)))
+				return -1;
+
+			if (frontend_tune_dvb_s(frontend_fd, ifreq, symbol_rate))
+				return -1;
+			break;
+		}
+
+		case FE_QAM: {
+			printf("Tuning to %u Mhz, %u MSym/s, %s ...\n", frequency / 1000, symbol_rate / 1000, (modulation == QAM_64 ? "QAM 64" : "QAM 256"));
+			if (frontend_tune_dvb_c(frontend_fd, frequency, symbol_rate, modulation))
+				return -1;
+			break;
+
+		}
+
+		default:
+			printf("Unhandled frontend type\n");
+			return -1;
+
 	}
-
-	if (frontend_set_voltage(frontend_fd, (polarity == 'h' ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13)))
-		return -1;
-
-	if (frontend_set_tone(frontend_fd, (hiband ? SEC_TONE_ON : SEC_TONE_OFF)))
-		return -1;
-
-	if (frontend_tune(frontend_fd, ifreq, symbol_rate))
-		return -1;
 
 	fe_status_t status;
 	if (frontend_get_status(frontend_fd, tuning_timeout, &status))
@@ -266,6 +308,8 @@ int main(int argc, char *argv[]) {
 
 
 	// Open pcap
+	if (DLT_MPEG_2_TS == DLT_USER0)
+		printf("Warning, your libpcap doesn't support DLT_MPEG_2_TS. Saving as DLT_USER0 instead.\n");
 	pcap_t *pcap = pcap_open_dead(DLT_MPEG_2_TS, MPEG_TS_LEN);
 
 	if (!pcap) {
@@ -320,12 +364,19 @@ int main(int argc, char *argv[]) {
 
 		// Save the packet
 		pcap_dump((u_char*)pcap_dumper, &phdr, buff);
+
+		pkt_count++;
+
+		if (!(pkt_count % 1000)) {
+			printf("\rGot %lu", pkt_count);
+			fflush(stdout);
+		}
 	}
 
 
 	pcap_dump_close(pcap_dumper);
 	pcap_close(pcap);
-	printf("Pcap closed\n");
+	printf("\rDumped %lu packets\n", pkt_count);
 
 	close(dvr_fd);
 	close(demux_fd);
