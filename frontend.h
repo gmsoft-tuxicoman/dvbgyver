@@ -27,6 +27,7 @@ int frontend_open(char *frontend, struct dvb_frontend_info *fe_info);
 void frontend_print_info(struct dvb_frontend_info *fe_info);
 int frontend_tune_dvb_s(int frontend_fd, unsigned int ifreq, unsigned int symbol_rate);
 int frontend_tune_dvb_c(int frontend_fd, unsigned int freq, unsigned int symbol_rate, fe_modulation_t modulation);
+int frontend_tune_dvb_t(int frontend_fd, unsigned int freq, fe_modulation_t modulation, fe_bandwidth_t bandwidth, fe_transmit_mode_t transmit_mode, fe_code_rate_t code_rate, fe_guard_interval_t guard_interval);
 int frontend_get_status(int frontend_fd, unsigned int timeout, fe_status_t *status);
 int frontend_set_voltage(int frontend_fd, fe_sec_voltage_t v);
 int frontend_set_tone(int frontend_fd, fe_sec_tone_mode_t t);

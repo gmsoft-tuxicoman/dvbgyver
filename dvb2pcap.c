@@ -31,6 +31,8 @@
 #include <errno.h>
 #include <linux/dvb/dmx.h>
 #include <signal.h>
+#include <string.h>
+#include <stdlib.h>
 
 
 #include "frontend.h"
@@ -38,7 +40,7 @@
 #include "config.h"
 
 
-#define PID_FULL_TS 0x2000
+#define PID_FULL_TS "8192"
 #define MPEG_TS_LEN 188
 
 #ifndef DLT_MPEG_2_TS
@@ -52,17 +54,21 @@ void print_usage(char *app) {
 	printf("Usage : %s <options>\n"
 		"\n"
 		"Options are :\n"
-		" -h, --help                 Display this help and exit\n"
-		" -a, --adapter=X            Adapter to use\n"
-		" -f, --frontend=X           Frontend to use\n"
-		" -d, --demux=X              Demux to use\n"
-		" -t, --timeout=X            Tuning timeout in seconds, default 5\n"
-		" -f, --frequency=X          Frequency to tune to in Hz\n"
-		" -s, --symbol-rate=X        Symbol rate in Sym/s\n"
-		" -p, --polarity=[h,v]       Polarity (DVB-S only, default: h)\n"
-		" -o, --output=X             Output file (default: dvb.cap)\n"
-		" -m, --modulation=[64,256]  QAM modulation to use (DVB-C only, default: 256)\n"
-		" -P, --pid=X                Capture a single PID (default: all)\n"
+		" -h, --help                                      Display this help and exit\n"
+		" -A, --adapter=X                                 Adapter to use\n"
+		" -F, --frontend=X                                Frontend to use\n"
+		" -D, --demux=X                                   Demux to use\n"
+		" -T, --timeout=X                                 Tuning timeout in seconds, default 5\n"
+		" -f, --frequency=X                               Frequency to tune to in Hz\n"
+		" -s, --symbol-rate=X                             Symbol rate in Sym/s\n"
+		" -p, --polarity=[h,v]                            Polarity (DVB-S only, default: h)\n"
+		" -m, --modulation=[auto,16,32,64,128,256]        QAM modulation to use (DVB-C and T only, default: 256)\n"
+		" -b, --bandwidth=[auto,6,7,8]                    Bandwidth in mHz (DVB-T only, default: 8)\n"
+		" -t, --transmission-mode=[auto,2,8]              Transmission mode (DVB-T only, default: 8)\n"
+		" -c, --code-rate=[auto,none,1_2,2_3,3_4,5_6,7_8] Code rate (DVB-T only, default: auto)\n"
+		" -g, --guard-interval=[auto,4,8,16,32]           Guard interval 1_X (DVB-T only, default: auto)\n"
+		" -o, --output=X                                  Output file (default: dvb.cap)\n"
+		" -P, --pid=X<,Y,.>                               Capture specific PIDs (default: all)\n"
 		,app);
 
 }
@@ -82,6 +88,10 @@ int main(int argc, char *argv[]) {
 	unsigned int frequency = 0;
 	unsigned int symbol_rate = 27500000;
 	fe_modulation_t modulation = QAM_256;
+	fe_bandwidth_t bandwidth = BANDWIDTH_8_MHZ;
+	fe_transmit_mode_t transmit_mode = TRANSMISSION_MODE_8K;
+	fe_code_rate_t code_rate = FEC_AUTO;
+	fe_guard_interval_t guard_interval = GUARD_INTERVAL_AUTO;
 
 	unsigned long int pkt_count = 0;
 
@@ -90,7 +100,8 @@ int main(int argc, char *argv[]) {
 
 	unsigned int verbose = 0;
 
-	uint16_t pid = PID_FULL_TS;
+
+	char *pids = PID_FULL_TS;
 
 	while (1) {
 		static struct option long_options[] = {
@@ -98,16 +109,20 @@ int main(int argc, char *argv[]) {
 			{ "adapter", 1, 0, 'A' },
 			{ "frontend", 1, 0, 'F' },
 			{ "demux", 1, 0, 'D' },
-			{ "timeout", 1, 0, 't' },
+			{ "timeout", 1, 0, 'T' },
 			{ "frequency", 1, 0, 'f' },
 			{ "symbol-rate", 1, 0, 's' },
 			{ "polarity", 1, 0, 'p' },
 			{ "modulation", 1, 0, 'm' },
+			{ "bandwidth", 1, 0, 'b' },
+			{ "transmission-mode", 1, 0, 't' },
+			{ "code-rate", 1, 0, 'c' },
+			{ "guard-interval", 1, 0, 'g' },
 			{ "output", 1, 0, 'o' },
 			{ "pid", 1, 0, 'P' },
 		};
 
-		char *args = "hA:F:D:t:f:s:p:m:o:P:";
+		char *args = "hA:F:D:T:f:s:p:m:b:t:c:g:o:P:";
 
 		int c = getopt_long(argc, argv, args, long_options, NULL);
 
@@ -139,7 +154,7 @@ int main(int argc, char *argv[]) {
 					return 1;
 				}
 				break;
-			case 't':
+			case 'T':
 				if (sscanf(optarg, "%u", &tuning_timeout) != 1) {
 					printf("Invalid timeout \"%s\"\n", optarg);
 					print_usage(argv[0]);
@@ -181,8 +196,16 @@ int main(int argc, char *argv[]) {
 				}
 				break;
 			case 'm':
-				if (!strcmp("64", optarg)) {
+				if (!strcmp("auto", optarg)) {
+					modulation = QAM_AUTO;
+				} else if (!strcmp("16", optarg)) {
+					modulation = QAM_16;
+				} else if (!strcmp("32", optarg)) {
+					modulation = QAM_32;
+				} else if (!strcmp("64", optarg)) {
 					modulation = QAM_64;
+				} else if (!strcmp("128", optarg)) {
+					modulation = QAM_128;
 				} else if (!strcmp("256", optarg)) {
 					modulation = QAM_256;
 				} else {
@@ -191,16 +214,77 @@ int main(int argc, char *argv[]) {
 					return 1;
 				}
 				break;
-
+			case 'b':
+				if (!strcmp("auto", optarg)) {
+					bandwidth = BANDWIDTH_AUTO;
+				} else if (!strcmp("6", optarg)) {
+					bandwidth = BANDWIDTH_6_MHZ;
+				} else if (!strcmp("7", optarg)) {
+					bandwidth = BANDWIDTH_7_MHZ;
+				} else if (!strcmp("8", optarg)) {
+					bandwidth = BANDWIDTH_8_MHZ;
+				} else {
+					printf("Invalid bandwidth \"%s\"\n", optarg);
+					print_usage(argv[0]);
+					return 1;
+				}
+				break;
+			case 't':
+				if (!strcmp("auto", optarg)) {
+					transmit_mode = TRANSMISSION_MODE_AUTO;
+				} else if (!strcmp("2", optarg)) {
+					transmit_mode = TRANSMISSION_MODE_2K;
+				} else if (!strcmp("8", optarg)) {
+					transmit_mode = TRANSMISSION_MODE_8K;
+				} else {
+					printf("Invalid transmission mode \"%s\"\n", optarg);
+					print_usage(argv[0]);
+					return 1;
+				}
+				break;
+			case 'c':
+				if (!strcmp("auto", optarg)) {
+					code_rate = FEC_AUTO;
+				} else if (!strcmp("none", optarg)) {
+					code_rate = FEC_NONE;
+				} else if (!strcmp("1_2", optarg)) {
+					code_rate = FEC_1_2;
+				} else if (!strcmp("2_3", optarg)) {
+					code_rate = FEC_2_3;
+				} else if (!strcmp("3_4", optarg)) {
+					code_rate = FEC_3_4;
+				} else if (!strcmp("5_6", optarg)) {
+					code_rate = FEC_5_6;
+				} else if (!strcmp("7_8", optarg)) {
+					code_rate = FEC_7_8;
+				} else {
+					printf("Invalid code rate \"%s\"\n", optarg);
+					print_usage(argv[0]);
+					return 1;
+				}
+				break;
+			case 'g':
+				if (!strcmp("auto", optarg)) {
+					guard_interval = GUARD_INTERVAL_AUTO;
+				} else if (!strcmp("4", optarg)) {
+					guard_interval = GUARD_INTERVAL_1_4;
+				} else if (!strcmp("8", optarg)) {
+					guard_interval = GUARD_INTERVAL_1_8;
+				} else if (!strcmp("16", optarg)) {
+					guard_interval = GUARD_INTERVAL_1_16;
+				} else if (!strcmp("32", optarg)) {
+					guard_interval = GUARD_INTERVAL_1_32;
+				} else {
+					printf("Invalid guard time \"%s\"\n", optarg);
+					print_usage(argv[0]);
+					return 1;
+				}
+				break;
 			case 'o':
 				output = optarg;
 				break;
 			case 'P':
-				if (sscanf(optarg, "%hu", &pid) != 1) {
-					printf("Invalid PID \"%s\"\n", optarg);
-					print_usage(argv[0]);
-					return 1;
-				}
+				pids = optarg;
 				break;
 
 			default:
@@ -224,7 +308,7 @@ int main(int argc, char *argv[]) {
 
 	switch (fe_info.type) {
 		case FE_QPSK: {
-			printf("Tuning to %u Mhz, %u MSym/s, %c Polarity ...\n", frequency / 1000, symbol_rate / 1000, polarity);
+			printf("Tuning to %u MHz, %u MSym/s, %c Polarity ...\n", frequency / 1000, symbol_rate / 1000, polarity);
 			unsigned int ifreq = 0, hiband = 0;
 			if (lnb_get_parameters(lnb_type_univeral, frequency, &ifreq, &hiband)) {	
 				printf("Error while getting LNB parameters");
@@ -243,12 +327,21 @@ int main(int argc, char *argv[]) {
 		}
 
 		case FE_QAM: {
-			printf("Tuning to %u Mhz, %u MSym/s, %s ...\n", frequency / 1000, symbol_rate / 1000, (modulation == QAM_64 ? "QAM 64" : "QAM 256"));
+			printf("Tuning to %u MHz, %u MSym/s, %s ...\n", frequency / 1000, symbol_rate / 1000, (modulation == QAM_64 ? "QAM 64" : "QAM 256"));
 			if (frontend_tune_dvb_c(frontend_fd, frequency, symbol_rate, modulation))
 				return -1;
 			break;
 
 		}
+		
+		case FE_OFDM: {
+			// Improve this message
+			printf("Tuning to %u MHz ...\n", frequency / 1000);
+			if (frontend_tune_dvb_t(frontend_fd, frequency, modulation, bandwidth, transmit_mode, code_rate, guard_interval))
+				return -1;
+			break;
+		}
+
 
 		default:
 			printf("Unhandled frontend type\n");
@@ -274,25 +367,53 @@ int main(int argc, char *argv[]) {
 	snprintf(demux_str, NAME_MAX - 1, "/dev/dvb/adapter%u/demux%u", adapter, frontend);
 
 
-	int demux_fd = open(demux_str, O_RDWR);
-	if (demux_fd == -1) {
-		perror("Error while opening the demux");
-		return 1;
-	}
 
 	// Setup the demux
-	
-	struct dmx_pes_filter_params filter = {0};
-	filter.pid = pid;
-	filter.input = DMX_IN_FRONTEND;
-	filter.output = DMX_OUT_TS_TAP;
-	filter.pes_type = DMX_PES_OTHER;
-	filter.flags = DMX_IMMEDIATE_START;
 
-	if (ioctl(demux_fd,  DMX_SET_PES_FILTER, &filter) != 0) {
-		perror("Error while setting demux filter");
-		return 1;
+	// Parse the PIDS
+	int demux_fd_count = 0;
+	int *demux_fd = NULL;
+	char *my_pids = strdup(pids);
+	char *str, *token, *saveptr = NULL;
+	
+	for (str = my_pids; ; str = NULL) {
+
+		demux_fd = realloc(demux_fd, sizeof(int) * (demux_fd_count + 1));
+		if (!demux_fd) {
+			perror("Not enough memory");
+			return 1;
+		}
+
+
+		demux_fd[demux_fd_count] = open(demux_str, O_RDWR);
+		if (demux_fd[demux_fd_count] == -1) {
+			perror("Error while opening the demux");
+			return 1;
+		}
+		
+		token = strtok_r(str, ",", &saveptr);
+		if (!token)
+			break;
+		uint16_t pid;
+		if (sscanf(token, "%hu", &pid) != 1) {
+			printf("Unparseable PID : \"%s\"\n", token);
+			return 1;
+		}
+
+		struct dmx_pes_filter_params filter = {0};
+		filter.pid = pid;
+		filter.input = DMX_IN_FRONTEND;
+		filter.output = DMX_OUT_TS_TAP;
+		filter.pes_type = DMX_PES_OTHER;
+		filter.flags = DMX_IMMEDIATE_START;
+
+		if (ioctl(demux_fd[demux_fd_count],  DMX_SET_PES_FILTER, &filter) != 0) {
+			perror("Error while setting demux filter");
+			return 1;
+		}
 	}
+
+	free(my_pids);
 
 
 	// Open the DVR
@@ -379,7 +500,10 @@ int main(int argc, char *argv[]) {
 	printf("\rDumped %lu packets\n", pkt_count);
 
 	close(dvr_fd);
-	close(demux_fd);
+	int i;
+	for (i = 0; i < demux_fd_count; i++)
+		close(demux_fd[i]);
+	free(demux_fd);
 	close(frontend_fd);
 
 }

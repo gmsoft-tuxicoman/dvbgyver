@@ -130,6 +130,26 @@ int frontend_tune_dvb_c(int frontend_fd, unsigned int freq, unsigned int symbol_
 	return 0;
 }
 
+int frontend_tune_dvb_t(int frontend_fd, unsigned int freq, fe_modulation_t modulation, fe_bandwidth_t bandwidth, fe_transmit_mode_t transmit_mode, fe_code_rate_t code_rate, fe_guard_interval_t guard_interval) {
+
+	struct dvb_frontend_parameters params = {0};
+	params.frequency = freq;
+	params.inversion = INVERSION_AUTO;
+	params.u.ofdm.constellation = modulation;
+	params.u.ofdm.code_rate_HP = code_rate;
+	params.u.ofdm.code_rate_LP = FEC_NONE;
+	params.u.ofdm.constellation = modulation;
+	params.u.ofdm.transmission_mode = transmit_mode;
+	params.u.ofdm.guard_interval = guard_interval;
+	params.u.ofdm.hierarchy_information = HIERARCHY_NONE; // Only this is supported now
+
+	if (ioctl(frontend_fd, FE_SET_FRONTEND, &params)) {
+		perror("Error while setting frontend");
+		return 1;
+	}
+
+	return 0;
+}
 
 
 int frontend_get_status(int frontend_fd, unsigned int timeout, fe_status_t *status) {
